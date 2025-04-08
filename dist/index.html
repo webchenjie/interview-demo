@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>233乐园社区发现页</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Helvetica, Arial, sans-serif;
+        background-color: #f5f5f5;
+        color: #333;
+        line-height: 1.5;
+        touch-action: pan-y;
+      }
+
+      #app {
+        position: relative;
+        overflow-x: hidden;
+        min-height: 100vh;
+      }
+
+      .refresh-container {
+        position: fixed;
+        top: -50px;
+        left: 0;
+        width: 100%;
+        height: 50px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 100;
+        transition: transform 0.3s;
+      }
+
+      .refresh-content {
+        background: white;
+        padding: 10px 20px;
+        border-radius: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+      }
+
+      .refresh-spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .container {
+        padding: 10px;
+        max-width: 100%;
+        transform: translateY(0);
+        transition: transform 0.3s;
+        min-height: calc(100vh - 20px);
+      }
+
+      .waterfall {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+      }
+
+      .column {
+        flex: 0 0 48%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .card {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .card-media {
+        width: 100%;
+        position: relative;
+      }
+
+      .card-media img {
+        width: 100%;
+        display: block;
+      }
+
+      .card-media video {
+        width: 100%;
+        display: block;
+        background: #000;
+      }
+
+      .play-icon {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 40px;
+        height: 40px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+      }
+
+      .card-content {
+        padding: 10px;
+      }
+
+      .card-title {
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 8px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .card-footer {
+        display: flex;
+        align-items: center;
+        font-size: 12px;
+        color: #999;
+      }
+
+      .avatar {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 6px;
+      }
+
+      .username {
+        margin-right: 10px;
+      }
+
+      .likes {
+        display: flex;
+        align-items: center;
+      }
+
+      .likes i {
+        margin-right: 2px;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 15px;
+        color: #999;
+        font-size: 14px;
+      }
+
+      .no-more {
+        text-align: center;
+        padding: 20px;
+        color: #999;
+        font-size: 14px;
+      }
+
+      .empty-data {
+        text-align: center;
+        padding: 50px 20px;
+        color: #999;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div
+        class="refresh-container"
+        :style="{ transform: `translateY(${refreshHeight}px)` }"
+      >
+        <div class="refresh-content">
+          <div class="refresh-spinner" v-if="refreshing"></div>
+          <span>{{ refreshText }}</span>
+        </div>
+      </div>
+
+      <div
+        class="container"
+        :style="{ transform: `translateY(${contentOffset}px)` }"
+      >
+        <template v-if="items.length > 0">
+          <div class="waterfall">
+            <div class="column">
+              <div
+                class="card"
+                v-for="(item, index) in leftColumn"
+                :key="item.id"
+                v-if="index % 2 === 0"
+              >
+                <div class="card-media" @click="playMedia(item)">
+                  <img
+                    v-if="item.type === 'image'"
+                    :src="item.media"
+                    :alt="item.title"
+                  />
+                  <video
+                    v-else-if="item.type === 'video'"
+                    :poster="item.poster"
+                    preload="none"
+                    ref="videoPlayer"
+                    :data-id="item.id"
+                    webkit-playsinline
+                    playsinline
+                  >
+                    <source :src="item.media" type="video/mp4" />
+                  </video>
+                  <div
+                    class="play-icon"
+                    v-if="item.type === 'video' && !item.playing"
+                    >▶</div
+                  >
+                </div>
+                <div class="card-content">
+                  <div class="card-title">{{ item.title }}</div>
+                  <div class="card-footer">
+                    <img
+                      class="avatar"
+                      :src="item.avatar"
+                      :alt="item.username"
+                    />
+                    <span class="username">{{ item.username }}</span>
+                    <span class="likes"><i>❤</i> {{ item.likes }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="column">
+              <div
+                class="card"
+                v-for="(item, index) in rightColumn"
+                :key="item.id"
+                v-if="index % 2 === 1"
+              >
+                <div class="card-media" @click="playMedia(item)">
+                  <img
+                    v-if="item.type === 'image'"
+                    :src="item.media"
+                    :alt="item.title"
+                  />
+                  <video
+                    v-else-if="item.type === 'video'"
+                    :poster="item.poster"
+                    preload="none"
+                    ref="videoPlayer"
+                    :data-id="item.id"
+                    webkit-playsinline
+                    playsinline
+                  >
+                    <source :src="item.media" type="video/mp4" />
+                  </video>
+                  <div
+                    class="play-icon"
+                    v-if="item.type === 'video' && !item.playing"
+                    >▶</div
+                  >
+                </div>
+                <div class="card-content">
+                  <div class="card-title">{{ item.title }}</div>
+                  <div class="card-footer">
+                    <img
+                      class="avatar"
+                      :src="item.avatar"
+                      :alt="item.username"
+                    />
+                    <span class="username">{{ item.username }}</span>
+                    <span class="likes"><i>❤</i> {{ item.likes }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="loading" v-if="loading">
+            <span>加载中...</span>
+          </div>
+
+          <div class="no-more" v-if="!hasMore && items.length > 0">
+            <span>没有更多内容了</span>
+          </div>
+        </template>
+
+        <div class="empty-data" v-else-if="!loading">
+          <span>暂无数据</span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      new Vue({
+        el: '#app',
+        data: {
+          items: [],
+          page: 1,
+          loading: false,
+          refreshing: false,
+          hasMore: true,
+          playingVideo: null,
+          startY: 0,
+          currentY: 0,
+          isDragging: false,
+          refreshHeight: 0,
+          maxRefreshHeight: 80,
+          refreshThreshold: 60,
+          refreshText: '下拉刷新',
+          checkContentTimer: null,
+          totalItems: 25, // 总共25条数据
+          itemsPerPage: 10 // 每次加载10条
+        },
+        computed: {
+          leftColumn() {
+            return this.items.filter((item, index) => index % 2 === 0)
+          },
+          rightColumn() {
+            return this.items.filter((item, index) => index % 2 === 1)
+          },
+          contentOffset() {
+            return Math.min(this.refreshHeight, this.maxRefreshHeight)
+          }
+        },
+        mounted() {
+          this.fetchData()
+          window.addEventListener('scroll', this.handleScroll)
+
+          // 添加触摸事件监听
+          document.addEventListener('touchstart', this.handleTouchStart)
+          document.addEventListener('touchmove', this.handleTouchMove, {
+            passive: false
+          })
+          document.addEventListener('touchend', this.handleTouchEnd)
+
+          // 初始检查内容高度
+          this.checkContentHeight()
+        },
+        beforeDestroy() {
+          window.removeEventListener('scroll', this.handleScroll)
+          document.removeEventListener('touchstart', this.handleTouchStart)
+          document.removeEventListener('touchmove', this.handleTouchMove)
+          document.removeEventListener('touchend', this.handleTouchEnd)
+
+          if (this.checkContentTimer) {
+            clearTimeout(this.checkContentTimer)
+          }
+        },
+        methods: {
+          fetchData() {
+            if (this.loading || !this.hasMore) return
+
+            this.loading = true
+
+            // 模拟API请求
+            setTimeout(() => {
+              const startIndex = (this.page - 1) * this.itemsPerPage
+              const endIndex = Math.min(
+                startIndex + this.itemsPerPage,
+                this.totalItems
+              )
+              const count = endIndex - startIndex
+
+              if (count <= 0) {
+                this.hasMore = false
+                this.loading = false
+                return
+              }
+
+              const newItems = this.generateMockData(this.page, count)
+
+              if (this.refreshing) {
+                this.items = newItems
+                this.refreshing = false
+                this.refreshHeight = 0
+                this.refreshText = '下拉刷新'
+                this.page = 2 // 刷新后下一页是第2页
+              } else {
+                this.items = [...this.items, ...newItems]
+                this.page++
+              }
+
+              // 检查是否还有更多数据
+              if (this.items.length >= this.totalItems) {
+                this.hasMore = false
+              }
+
+              this.loading = false
+
+              // 数据加载后检查内容高度
+              this.$nextTick(() => {
+                this.checkContentHeight()
+                // 重新绑定视频事件
+                this.bindVideoEvents()
+              })
+            }, 800)
+          },
+
+          generateMockData(page, count = 10) {
+            const mockItems = []
+
+            for (let i = 0; i < count; i++) {
+              const isVideo = Math.random() > 0.7
+              const id = `item-${page}-${i}`
+              const title = this.generateTitle()
+
+              mockItems.push({
+                id,
+                title,
+                type: isVideo ? 'video' : 'image',
+                media: isVideo
+                  ? 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4'
+                  : `https://picsum.photos/400/${
+                      300 + Math.floor(Math.random() * 200)
+                    }?random=${id}`,
+                poster: isVideo
+                  ? `https://picsum.photos/400/300?random=${id}`
+                  : null,
+                avatar: `https://i.pravatar.cc/40?img=${Math.floor(
+                  Math.random() * 70
+                )}`,
+                username: this.generateUsername(),
+                likes: Math.floor(Math.random() * 1000),
+                playing: false
+              })
+            }
+
+            return mockItems
+          },
+
+          generateTitle() {
+            const titles = [
+              '这个游戏太好玩了，根本停不下来！',
+              '新手入门指南，快速上手技巧分享',
+              '最新活动来袭，参与赢取限定皮肤',
+              '高手对决，精彩瞬间不容错过',
+              '我的游戏日常，记录美好时刻',
+              '攻略分享：如何快速升级',
+              '游戏里的隐藏彩蛋你发现了吗？',
+              '组队开黑，有一起的吗？',
+              '新版本体验报告，这些改动你满意吗？',
+              '我的角色装扮秀，喜欢就点个赞吧'
+            ]
+            return titles[Math.floor(Math.random() * titles.length)]
+          },
+
+          generateUsername() {
+            const names = [
+              '游戏达人',
+              '快乐玩家',
+              '233用户',
+              '电竞少年',
+              '萌新小白',
+              '大神选手',
+              '休闲玩家',
+              '专业代练',
+              '攻略大师',
+              '皮肤收藏家'
+            ]
+            const nums = Math.floor(Math.random() * 1000)
+            return `${names[Math.floor(Math.random() * names.length)]}${nums}`
+          },
+
+          handleScroll() {
+            const scrollY = window.scrollY || window.pageYOffset
+            const visibleHeight = window.innerHeight
+            const pageHeight = document.documentElement.scrollHeight
+            const bottomOfPage = visibleHeight + scrollY >= pageHeight - 100
+
+            if (bottomOfPage && !this.loading && this.hasMore) {
+              this.fetchData()
+            }
+          },
+
+          checkContentHeight() {
+            // 清除之前的定时器
+            if (this.checkContentTimer) {
+              clearTimeout(this.checkContentTimer)
+            }
+
+            // 延迟检查以确保DOM已更新
+            this.checkContentTimer = setTimeout(() => {
+              const container = document.querySelector('.container')
+              const visibleHeight = window.innerHeight
+
+              if (
+                container.offsetHeight < visibleHeight &&
+                this.hasMore &&
+                !this.loading
+              ) {
+                this.fetchData()
+              }
+            }, 300)
+          },
+
+          bindVideoEvents() {
+            if (this.$refs.videoPlayer) {
+              this.$refs.videoPlayer.forEach((video) => {
+                const id = video.getAttribute('data-id')
+                const item = this.items.find((item) => item.id === id)
+
+                if (item) {
+                  video.onplay = () => this.onVideoPlay(item)
+                  video.onpause = () => this.onVideoPause(item)
+                  video.onended = () => this.onVideoPause(item)
+                }
+              })
+            }
+          },
+
+          handleTouchStart(e) {
+            const scrollY = window.scrollY || window.pageYOffset
+
+            // 只有在顶部时才触发下拉刷新
+            if (scrollY <= 0) {
+              this.startY = e.touches[0].clientY
+              this.isDragging = true
+            }
+          },
+
+          handleTouchMove(e) {
+            if (!this.isDragging) return
+
+            this.currentY = e.touches[0].clientY
+            const deltaY = this.currentY - this.startY
+
+            // 只有在向下拉动时才处理
+            if (deltaY > 0) {
+              e.preventDefault()
+
+              this.refreshHeight = Math.min(deltaY * 0.6, this.maxRefreshHeight)
+
+              if (
+                this.refreshHeight > this.refreshThreshold &&
+                !this.refreshing
+              ) {
+                this.refreshText = '释放刷新'
+              } else if (!this.refreshing) {
+                this.refreshText = '下拉刷新'
+              }
+            }
+          },
+
+          handleTouchEnd() {
+            if (!this.isDragging) return
+
+            this.isDragging = false
+
+            if (
+              this.refreshHeight > this.refreshThreshold &&
+              !this.refreshing
+            ) {
+              this.refreshing = true
+              this.refreshText = '正在刷新...'
+              this.refreshData()
+            } else {
+              this.refreshHeight = 0
+            }
+          },
+
+          refreshData() {
+            this.page = 1
+            this.hasMore = true
+            this.items = []
+            this.fetchData()
+          },
+
+          playMedia(item) {
+            if (item.type === 'video') {
+              const videoEl = this.$refs.videoPlayer.find(
+                (v) => v.getAttribute('data-id') === item.id
+              )
+              if (videoEl) {
+                if (item.playing) {
+                  videoEl.pause()
+                } else {
+                  // 暂停当前播放的视频
+                  if (this.playingVideo) {
+                    const currentVideoEl = this.$refs.videoPlayer.find(
+                      (v) => v.getAttribute('data-id') === this.playingVideo.id
+                    )
+                    if (currentVideoEl) currentVideoEl.pause()
+                  }
+                  videoEl.play()
+                }
+              }
+            }
+          },
+
+          onVideoPlay(item) {
+            // 设置当前播放视频
+            item.playing = true
+            this.playingVideo = item
+          },
+
+          onVideoPause(item) {
+            if (this.playingVideo && this.playingVideo.id === item.id) {
+              item.playing = false
+              this.playingVideo = null
+            }
+          }
+        }
+      })
+    </script>
+  </body>
+</html>
